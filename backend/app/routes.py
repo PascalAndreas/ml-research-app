@@ -1,10 +1,11 @@
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 
 from .models import Paper, Tag, PaperTagLink
-from .crud import create_tag
+from .crud import create_tag, list_papers as crud_list_papers
 
 router = APIRouter()
 
@@ -21,8 +22,11 @@ tag_router = APIRouter(prefix="/tags")
 
 
 @paper_router.get("/")
-async def list_papers(session: Session = Depends(get_session)) -> List[Paper]:
-    return session.exec(select(Paper)).all()
+async def list_papers(
+    sort: str | None = None,
+    session: Session = Depends(get_session),
+) -> List[Paper]:
+    return crud_list_papers(session, sort=sort)
 
 
 @paper_router.get("/{paper_id}")
@@ -31,6 +35,18 @@ async def get_paper(paper_id: str, session: Session = Depends(get_session)) -> P
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
     return paper
+
+
+@paper_router.get("/{paper_id}/pdf")
+async def get_paper_pdf(paper_id: str, session: Session = Depends(get_session)):
+    from .main import PDF_FOLDER
+    paper = session.get(Paper, paper_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    file_path = PDF_FOLDER / paper.filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="PDF file missing")
+    return FileResponse(file_path)
 
 
 @tag_router.get("/")
